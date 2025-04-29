@@ -94,9 +94,11 @@ user_prompt = st.text_area(
 
 # モックハンドラの初期化
 mock_handler = MockLLMHandler()
+execute_button = st.button("実行", type="primary")
 
 # 実行ボタン
-if st.button("実行", type="primary"):
+if execute_button or st.session_state.get("is_execute_button"):
+    st.session_state["is_execute_button"] = True
     if not user_prompt:
         st.error("プロンプトを入力してください")
     elif not (openai_models or gemini_models):
@@ -105,12 +107,11 @@ if st.button("実行", type="primary"):
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        # 結果を保存するリスト
-        results = []
-
         # 実行するモデルの総数を計算
         total_models = len(openai_models) + len(gemini_models)
         current_model = 0
+
+        results = []
 
         # OpenAIモデルの実行
         if openai_models and st.session_state["has_openai_key"]:
@@ -213,6 +214,9 @@ if st.button("実行", type="primary"):
         # 進捗表示をクリア
         progress_bar.empty()
         status_text.empty()
+
+        # 結果をセッション状態に保存
+        st.session_state["results"] = results
 
         # 結果の表示
         if results:
@@ -545,32 +549,36 @@ if st.button("実行", type="primary"):
                             )
                             st.text_area("", result2["出力"], height=250, key="comp_2")
 
-            # 結果のダウンロードボタン
-            csv_data = df.drop(columns=["出力"]).to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="結果をCSVとしてダウンロード",
-                data=csv_data,
-                file_name=f'llm_comparison_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-                mime="text/csv",
-            )
+if st.session_state.get("is_execute_button"):
+    results = st.session_state["results"]
+    # 結果のダウンロードボタン
+    csv_data = df.drop(columns=["出力"]).to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="結果をCSVとしてダウンロード",
+        data=csv_data,
+        file_name=f'llm_comparison_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+        mime="text/csv",
+    )
 
-            # 詳細結果のJSONダウンロードも提供
-            json_results = []
-            for r in results:
-                json_result = r.copy()
-                # 数値の丸めなどの処理
-                json_result["実行時間(秒)"] = round(json_result["実行時間(秒)"], 3)
-                json_result["API利用料金(数値)"] = round(
-                    json_result["API利用料金(数値)"], 6
-                )
-                json_results.append(json_result)
+    # 詳細結果のJSONダウンロードも提供
+    json_results = []
+    for r in results:
+        json_result = r.copy()
+        # 数値の丸めなどの処理
+        json_result["実行時間(秒)"] = round(json_result["実行時間(秒)"], 3)
+        json_result["API利用料金(数値)"] = round(json_result["API利用料金(数値)"], 6)
+        json_results.append(json_result)
 
-            json_data = json.dumps(json_results, ensure_ascii=False, indent=2).encode(
-                "utf-8"
-            )
-            st.download_button(
-                label="詳細結果をJSONとしてダウンロード",
-                data=json_data,
-                file_name=f'llm_comparison_detail_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
-                mime="application/json",
-            )
+    json_data = json.dumps(json_results, ensure_ascii=False, indent=2).encode("utf-8")
+    st.download_button(
+        label="詳細結果をJSONとしてダウンロード",
+        data=json_data,
+        file_name=f'llm_comparison_detail_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
+        mime="application/json",
+    )
+    st.session_state["execute_button"] = True
+
+if st.session_state.get("is_execute_button"):
+    if st.button("ホームに戻る", type="primary"):
+        st.session_state["is_execute_button"] = False
+        st.session_state["results"] = []
