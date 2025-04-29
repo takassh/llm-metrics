@@ -58,8 +58,11 @@ def call_llm(model_name, provider, prompt, temperature, max_tokens, api_key):
             result_text = response.content
 
             # Gemini APIはトークン使用量の取得が難しいため推定値を使用
-            input_tokens = estimate_tokens(prompt)
-            output_tokens = estimate_tokens(result_text, True)
+            usage = response.usage_metadata
+            input_tokens = usage.get("input_tokens", estimate_tokens(prompt))
+            output_tokens = usage.get(
+                "output_tokens", estimate_tokens(result_text, True)
+            )
 
     except Exception as e:
         result_text = f"エラー: {str(e)}"

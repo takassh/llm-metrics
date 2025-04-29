@@ -16,6 +16,12 @@ from config import (
 from utils.llm_handler import MockLLMHandler, call_llm
 from utils.pricing import calculate_price
 
+
+def reset_session_state():
+    st.session_state["is_execute_button"] = False
+    st.session_state["results"] = []
+
+
 st.set_page_config(page_title="LLMモデル比較アプリ", layout="wide")
 
 st.title("LLMモデル比較アプリ")
@@ -52,6 +58,8 @@ with st.sidebar:
             st.warning("OpenAIモデルを使用するにはAPI Keyを入力してください")
         if not google_api_key:
             st.warning("Geminiモデルを使用するにはAPI Keyを入力してください")
+
+        reset_session_state()
     else:
         # モックモード時はAPIキー不要
         openai_api_key = "mock_key"
@@ -59,6 +67,7 @@ with st.sidebar:
         st.session_state["has_openai_key"] = True
         st.session_state["has_google_key"] = True
         st.info("モックモードではAPIキーは不要です")
+        reset_session_state()
 
     # モデル選択
     st.header("モデル選択")
@@ -551,6 +560,7 @@ if execute_button or st.session_state.get("is_execute_button"):
 
 if st.session_state.get("is_execute_button"):
     results = st.session_state["results"]
+    df = pd.DataFrame(results)
     # 結果のダウンロードボタン
     csv_data = df.drop(columns=["出力"]).to_csv(index=False).encode("utf-8")
     st.download_button(
@@ -580,5 +590,4 @@ if st.session_state.get("is_execute_button"):
 
 if st.session_state.get("is_execute_button"):
     if st.button("ホームに戻る", type="primary"):
-        st.session_state["is_execute_button"] = False
-        st.session_state["results"] = []
+        reset_session_state()
