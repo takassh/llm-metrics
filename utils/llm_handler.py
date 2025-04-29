@@ -57,7 +57,7 @@ def call_llm(model_name, provider, prompt, temperature, max_tokens, api_key):
             response = chat_model.invoke(messages)
             result_text = response.content
 
-            # Gemini APIはトークン使用量の取得が難しいため推定値を使用
+            # トークン使用量の取得
             usage = response.usage_metadata
             input_tokens = usage.get("input_tokens", estimate_tokens(prompt))
             output_tokens = usage.get(
