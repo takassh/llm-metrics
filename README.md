@@ -2,7 +2,6 @@
 
 ![CI](https://img.shields.io/badge/CI-passed-green)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Streamlit](https://img.shields.io/badge/streamlit-1.44.1-ff4b4b?logo=streamlit&logoColor=white)](https://streamlit.io/)
 
