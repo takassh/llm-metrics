@@ -1,7 +1,3 @@
-# モデル定義
-OPENAI_MODELS = ["gpt-3.5-turbo", "gpt-4", "gpt-4o"]
-GEMINI_MODELS = ["gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash"]
-
 # デフォルト設定
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 256
@@ -11,17 +7,23 @@ DEFAULT_PROMPT = """以下の問題を解いてください：
 
 # OpenAIの料金設定（1000トークンあたりのUSD）
 OPENAI_PRICING = {
-    "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
-    "gpt-4": {"input": 0.03, "output": 0.06},
-    "gpt-4o": {"input": 0.01, "output": 0.03},
+    "gpt-4o": {"input": 2.5/1000, "output": 10/1000},
+    "gpt-4.1": {"input": 2.0/1000, "output": 8.0/1000},
+    "gpt-4.1-mini": {"input": 0.4/1000, "output": 1.6/1000},
+    "gpt-4.1-nano": {"input": 0.1/1000, "output": 0.4/1000},
+    "o3": {"input": 10/1000, "output": 40/1000},
+    "o4-mini": {"input": 1.1/1000, "output": 4.4/1000},
 }
 
 # Geminiの料金設定（1000トークンあたりのUSD）
 GEMINI_PRICING = {
-    "gemini-pro": {"input": 0.00025, "output": 0.0005},
-    "gemini-1.5-pro": {"input": 0.0005, "output": 0.0015},
-    "gemini-1.5-flash": {"input": 0.00035, "output": 0.00105},
+    "gemini-2.0-flash": {"input": 0.1/1000, "output": 0.4/1000},
+    "gemini-2.5-pro-preview-03-25": {"input": 1.25/1000, "output": 10/1000},
 }
+
+# モデル定義
+OPENAI_MODELS = list(OPENAI_PRICING.keys())
+GEMINI_MODELS = list(GEMINI_PRICING.keys())
 
 # モックモード設定
 MOCK_RESPONSE_DELAY = {
