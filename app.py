@@ -323,57 +323,14 @@ if execute_button or st.session_state.get("is_execute_button"):
                     ]
                 ].copy()
 
-                # カラー定義
-                fill_colors = []
-                for provider in stats_df["プロバイダー"]:
-                    if provider == "OpenAI":
-                        fill_colors.append(
-                            [
-                                "#E5F6F0",
-                                "#E5F6F0",
-                                "#E5F6F0",
-                                "#E5F6F0",
-                                "#E5F6F0",
-                                "#E5F6F0",
-                                "#E5F6F0",
-                            ]
-                        )
-                    else:
-                        fill_colors.append(
-                            [
-                                "#E8F0FE",
-                                "#E8F0FE",
-                                "#E8F0FE",
-                                "#E8F0FE",
-                                "#E8F0FE",
-                                "#E8F0FE",
-                                "#E8F0FE",
-                            ]
-                        )
+                stats_df["実行時間(秒)"] = stats_df["実行時間(秒)"].round(2)
 
-                # Plotlyのテーブル作成
-                fig = go.Figure(
-                    data=[
-                        go.Table(
-                            header=dict(
-                                values=list(stats_df.columns),
-                                fill_color="#F0F2F6",
-                                align="left",
-                                font=dict(size=14),
-                            ),
-                            cells=dict(
-                                values=[stats_df[col] for col in stats_df.columns],
-                                fill_color=fill_colors,
-                                align="left",
-                                font=dict(size=13),
-                            ),
-                        )
-                    ]
+                st.subheader("使用統計")
+                st.dataframe(
+                    stats_df,
+                    use_container_width=True,
+                    hide_index=True
                 )
-
-                fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=250)
-
-                st.plotly_chart(fig, use_container_width=True)
 
                 # メタデータ
                 st.subheader("実行情報")
