@@ -58,8 +58,6 @@ with st.sidebar:
             st.warning("OpenAIモデルを使用するにはAPI Keyを入力してください")
         if not google_api_key:
             st.warning("Geminiモデルを使用するにはAPI Keyを入力してください")
-
-        reset_session_state()
     else:
         # モックモード時はAPIキー不要
         openai_api_key = "mock_key"
@@ -67,7 +65,6 @@ with st.sidebar:
         st.session_state["has_openai_key"] = True
         st.session_state["has_google_key"] = True
         st.info("モックモードではAPIキーは不要です")
-        reset_session_state()
 
     # モデル選択
     st.header("モデル選択")

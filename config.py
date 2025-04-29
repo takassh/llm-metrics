@@ -7,16 +7,16 @@ DEFAULT_PROMPT = """以下の問題を解いてください：
 
 # OpenAIの料金設定（1000トークンあたりのUSD）
 OPENAI_PRICING = {
-    "gpt-4o": {"input": 2.5/1000, "output": 10/1000},
-    "gpt-4.1": {"input": 2.0/1000, "output": 8.0/1000},
-    "gpt-4.1-mini": {"input": 0.4/1000, "output": 1.6/1000},
-    "gpt-4.1-nano": {"input": 0.1/1000, "output": 0.4/1000},
+    "gpt-4o": {"input": 2.5 / 1000, "output": 10 / 1000},
+    "gpt-4.1": {"input": 2.0 / 1000, "output": 8.0 / 1000},
+    "gpt-4.1-mini": {"input": 0.4 / 1000, "output": 1.6 / 1000},
+    "gpt-4.1-nano": {"input": 0.1 / 1000, "output": 0.4 / 1000},
 }
 
 # Geminiの料金設定（1000トークンあたりのUSD）
 GEMINI_PRICING = {
-    "gemini-2.0-flash": {"input": 0.1/1000, "output": 0.4/1000},
-    "gemini-2.5-pro-preview-03-25": {"input": 1.25/1000, "output": 10/1000},
+    "gemini-2.0-flash": {"input": 0.1 / 1000, "output": 0.4 / 1000},
+    "gemini-2.5-pro-preview-03-25": {"input": 1.25 / 1000, "output": 10 / 1000},
 }
 
 # モデル定義
