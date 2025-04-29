@@ -3,7 +3,6 @@ import json
 
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
 from config import (
@@ -17,8 +16,7 @@ from utils.llm_handler import MockLLMHandler, call_llm
 from utils.pricing import calculate_price
 
 
-def reset_session_state():
-    st.session_state["is_execute_button"] = False
+def reset_execution():
     st.session_state["results"] = []
 
 
@@ -42,6 +40,10 @@ with st.sidebar:
     # モック/本番モード切り替え
     st.header("モード設定")
     mock_mode = st.checkbox("モックモード（APIを使用しない）", value=True)
+
+    if st.session_state["mock_mode"] != mock_mode:
+        reset_execution()
+
     st.session_state["mock_mode"] = mock_mode
 
     if not mock_mode:
@@ -102,9 +104,8 @@ user_prompt = st.text_area(
 mock_handler = MockLLMHandler()
 execute_button = st.button("実行", type="primary")
 
-# 実行ボタン
-if execute_button or st.session_state.get("is_execute_button"):
-    st.session_state["is_execute_button"] = True
+# 実行
+if execute_button:
     if not user_prompt:
         st.error("プロンプトを入力してください")
     elif not (openai_models or gemini_models):
@@ -224,179 +225,205 @@ if execute_button or st.session_state.get("is_execute_button"):
         # 結果をセッション状態に保存
         st.session_state["results"] = results
 
-        # 結果の表示
-        if results:
-            # DataFrameに変換
-            df = pd.DataFrame(results)
+# 結果出力
+if st.session_state.get("results"):
+    results = st.session_state["results"]
+    # 結果の表示
+    if results:
+        # DataFrameに変換
+        df = pd.DataFrame(results)
 
-            # 2カラムレイアウト
-            col1, col2 = st.columns(2)
+        # 2カラムレイアウト
+        col1, col2 = st.columns(2)
 
-            with col1:
-                # 実行時間グラフの表示
-                st.header("実行時間比較")
+        with col1:
+            # 実行時間グラフの表示
+            st.header("実行時間比較")
 
-                # カラーマップの設定
-                color_map = {"OpenAI": "#00A67E", "Google": "#4285F4"}
+            # カラーマップの設定
+            color_map = {"OpenAI": "#00A67E", "Google": "#4285F4"}
 
-                # Plotlyでバーチャートを作成
-                fig = px.bar(
-                    df,
-                    x="モデル",
-                    y="実行時間(秒)",
-                    color="プロバイダー",
-                    color_discrete_map=color_map,
-                    text=df["実行時間(秒)"].apply(lambda x: f"{x:.2f}s"),
-                    height=400,
-                    title="各モデルの実行時間比較",
+            # Plotlyでバーチャートを作成
+            fig = px.bar(
+                df,
+                x="モデル",
+                y="実行時間(秒)",
+                color="プロバイダー",
+                color_discrete_map=color_map,
+                text=df["実行時間(秒)"].apply(lambda x: f"{x:.2f}s"),
+                height=400,
+                title="各モデルの実行時間比較",
+            )
+
+            # グラフのレイアウト調整
+            fig.update_layout(
+                xaxis_title="モデル",
+                yaxis_title="実行時間 (秒)",
+                legend_title="プロバイダー",
+                font=dict(size=14),
+                xaxis={"categoryorder": "total descending"},
+                hovermode="x unified",
+            )
+
+            # テキストの位置調整
+            fig.update_traces(textposition="outside", textfont=dict(size=14))
+
+            # Tooltipのカスタマイズ
+            fig.update_traces(
+                hovertemplate="<b>%{x}</b><br>実行時間: %{y:.2f}秒<br>プロバイダー: %{marker.color}"
+            )
+
+            # プロットの表示
+            st.plotly_chart(fig, use_container_width=True)
+
+            # コスト比較グラフ
+            st.header("API利用料金比較")
+
+            fig = px.bar(
+                df,
+                x="モデル",
+                y="API利用料金(数値)",
+                color="プロバイダー",
+                color_discrete_map=color_map,
+                text=df["API利用料金"],
+                height=400,
+                title="各モデルのAPI利用料金比較",
+            )
+
+            # グラフのレイアウト調整
+            fig.update_layout(
+                xaxis_title="モデル",
+                yaxis_title="コスト (USD)",
+                legend_title="プロバイダー",
+                font=dict(size=14),
+                xaxis={"categoryorder": "total descending"},
+                hovermode="x unified",
+            )
+
+            # テキストの位置調整
+            fig.update_traces(textposition="outside", textfont=dict(size=14))
+
+            # Tooltipのカスタマイズ
+            fig.update_traces(
+                hovertemplate="<b>%{x}</b><br>コスト: %{text}<br>プロバイダー: %{marker.color}"
+            )
+
+            # プロットの表示
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 使用統計（Plotlyのテーブルで表示）
+            st.subheader("使用統計")
+
+            # テーブル用のデータフレーム作成
+            stats_df = df[
+                [
+                    "モデル",
+                    "プロバイダー",
+                    "実行時間(秒)",
+                    "入力トークン数",
+                    "出力トークン数",
+                    "総トークン数",
+                    "API利用料金",
+                ]
+            ].copy()
+
+            stats_df["実行時間(秒)"] = stats_df["実行時間(秒)"].round(2)
+
+            st.subheader("使用統計")
+            st.dataframe(stats_df, use_container_width=True, hide_index=True)
+
+            # メタデータ
+            st.subheader("実行情報")
+
+            # メタデータを用意
+            metadata = {
+                "実行日時": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "使用プロンプト文字数": len(user_prompt),
+                "Temperature設定": temperature,
+                "最大トークン数": max_tokens,
+                "モード": (
+                    "モックモード" if st.session_state["mock_mode"] else "本番モード"
+                ),
+            }
+
+            # メタデータを視覚的に表示
+            col1_meta, col2_meta = st.columns(2)
+
+            with col1_meta:
+                st.metric("プロンプト文字数", len(user_prompt))
+                st.metric("最大トークン数", max_tokens)
+
+            with col2_meta:
+                st.metric("Temperature設定", f"{temperature:.1f}")
+                st.metric(
+                    "モード", "モック" if st.session_state["mock_mode"] else "本番"
                 )
 
-                # グラフのレイアウト調整
-                fig.update_layout(
-                    xaxis_title="モデル",
-                    yaxis_title="実行時間 (秒)",
-                    legend_title="プロバイダー",
-                    font=dict(size=14),
-                    xaxis={"categoryorder": "total descending"},
-                    hovermode="x unified",
+            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=250)
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # メタデータ
+            st.subheader("実行情報")
+
+            # メタデータを用意
+            metadata = {
+                "実行日時": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "使用プロンプト文字数": len(user_prompt),
+                "Temperature設定": temperature,
+                "最大トークン数": max_tokens,
+                "モード": (
+                    "モックモード" if st.session_state["mock_mode"] else "本番モード"
+                ),
+            }
+
+            # メタデータを視覚的に表示
+            col1_meta, col2_meta = st.columns(2)
+
+            with col1_meta:
+                st.metric("プロンプト文字数", len(user_prompt))
+                st.metric("最大トークン数", max_tokens)
+
+            with col2_meta:
+                st.metric("Temperature設定", f"{temperature:.1f}")
+                st.metric(
+                    "モード", "モック" if st.session_state["mock_mode"] else "本番"
                 )
 
-                # テキストの位置調整
-                fig.update_traces(textposition="outside", textfont=dict(size=14))
+            # トークン数のドーナツチャート
+            token_data = stats_df[["モデル", "総トークン数"]].copy()
 
-                # Tooltipのカスタマイズ
-                fig.update_traces(
-                    hovertemplate="<b>%{x}</b><br>実行時間: %{y:.2f}秒<br>プロバイダー: %{marker.color}"
-                )
+            fig = px.pie(
+                token_data,
+                values="総トークン数",
+                names="モデル",
+                hole=0.4,
+                color="モデル",
+                title="トークン使用量の分布",
+            )
 
-                # プロットの表示
-                st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(
+                showlegend=True, height=300, margin=dict(t=30, b=0, l=0, r=0)
+            )
 
-                # コスト比較グラフ
-                st.header("API利用料金比較")
+            st.plotly_chart(fig, use_container_width=True)
 
-                fig = px.bar(
-                    df,
-                    x="モデル",
-                    y="API利用料金(数値)",
-                    color="プロバイダー",
-                    color_discrete_map=color_map,
-                    text=df["API利用料金"],
-                    height=400,
-                    title="各モデルのAPI利用料金比較",
-                )
+        with col2:
+            # 各モデルの出力結果を表示
+            st.header("出力結果")
 
-                # グラフのレイアウト調整
-                fig.update_layout(
-                    xaxis_title="モデル",
-                    yaxis_title="コスト (USD)",
-                    legend_title="プロバイダー",
-                    font=dict(size=14),
-                    xaxis={"categoryorder": "total descending"},
-                    hovermode="x unified",
-                )
+            # タブ形式で結果を表示
+            model_tabs = st.tabs([f"{r['モデル']}" for r in results])
+            for i, tab in enumerate(model_tabs):
+                with tab:
+                    result = results[i]
 
-                # テキストの位置調整
-                fig.update_traces(textposition="outside", textfont=dict(size=14))
-
-                # Tooltipのカスタマイズ
-                fig.update_traces(
-                    hovertemplate="<b>%{x}</b><br>コスト: %{text}<br>プロバイダー: %{marker.color}"
-                )
-
-                # プロットの表示
-                st.plotly_chart(fig, use_container_width=True)
-
-                # 使用統計（Plotlyのテーブルで表示）
-                st.subheader("使用統計")
-
-                # テーブル用のデータフレーム作成
-                stats_df = df[
-                    [
-                        "モデル",
-                        "プロバイダー",
-                        "実行時間(秒)",
-                        "入力トークン数",
-                        "出力トークン数",
-                        "総トークン数",
-                        "API利用料金",
-                    ]
-                ].copy()
-
-                stats_df["実行時間(秒)"] = stats_df["実行時間(秒)"].round(2)
-
-                st.subheader("使用統計")
-                st.dataframe(
-                    stats_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-                # メタデータ
-                st.subheader("実行情報")
-
-                # メタデータを用意
-                metadata = {
-                    "実行日時": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "使用プロンプト文字数": len(user_prompt),
-                    "Temperature設定": temperature,
-                    "最大トークン数": max_tokens,
-                    "モード": (
-                        "モックモード"
-                        if st.session_state["mock_mode"]
-                        else "本番モード"
-                    ),
-                }
-
-                # メタデータを視覚的に表示
-                col1_meta, col2_meta = st.columns(2)
-
-                with col1_meta:
-                    st.metric("プロンプト文字数", len(user_prompt))
-                    st.metric("最大トークン数", max_tokens)
-
-                with col2_meta:
-                    st.metric("Temperature設定", f"{temperature:.1f}")
-                    st.metric(
-                        "モード", "モック" if st.session_state["mock_mode"] else "本番"
+                    # モデル情報をカラーボックスで表示
+                    provider_color = (
+                        "#00A67E" if result["プロバイダー"] == "OpenAI" else "#4285F4"
                     )
-
-                # トークン数のドーナツチャート
-                token_data = stats_df[["モデル", "総トークン数"]].copy()
-
-                fig = px.pie(
-                    token_data,
-                    values="総トークン数",
-                    names="モデル",
-                    hole=0.4,
-                    color="モデル",
-                    title="トークン使用量の分布",
-                )
-
-                fig.update_layout(
-                    showlegend=True, height=300, margin=dict(t=30, b=0, l=0, r=0)
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-
-            with col2:
-                # 各モデルの出力結果を表示
-                st.header("出力結果")
-
-                # タブ形式で結果を表示
-                model_tabs = st.tabs([f"{r['モデル']}" for r in results])
-                for i, tab in enumerate(model_tabs):
-                    with tab:
-                        result = results[i]
-
-                        # モデル情報をカラーボックスで表示
-                        provider_color = (
-                            "#00A67E"
-                            if result["プロバイダー"] == "OpenAI"
-                            else "#4285F4"
-                        )
-                        st.markdown(
-                            f"""
+                    st.markdown(
+                        f"""
                             <div style="background-color:{provider_color}; color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
                                 <span style="font-size:1.2em; font-weight:bold;">{result['モデル']}</span> |
                                 {result['プロバイダー']} |
@@ -404,115 +431,110 @@ if execute_button or st.session_state.get("is_execute_button"):
                                 コスト: {result['API利用料金']}
                             </div>
                             """,
-                            unsafe_allow_html=True,
-                        )
+                        unsafe_allow_html=True,
+                    )
 
-                        # トークン情報表示
-                        st.markdown(
-                            f"""
+                    # トークン情報表示
+                    st.markdown(
+                        f"""
                             **トークン使用量**:
                             入力: {result['入力トークン数']} |
                             出力: {result['出力トークン数']} |
                             合計: {result['総トークン数']}
                             """
-                        )
-
-                        # 出力結果を表示
-                        st.text_area(
-                            "モデル出力", result["出力"], height=350, key=f"result_{i}"
-                        )
-
-                # モデル間の比較ページを追加
-                st.subheader("⚖️ モデル比較")
-
-                if len(results) >= 2:
-                    # 比較するモデルを選択
-                    col_comp1, col_comp2 = st.columns(2)
-                    with col_comp1:
-                        comp_model1 = st.selectbox(
-                            "モデル1", options=[r["モデル"] for r in results], index=0
-                        )
-                    with col_comp2:
-                        comp_model2 = st.selectbox(
-                            "モデル2",
-                            options=[r["モデル"] for r in results],
-                            index=min(1, len(results) - 1),
-                        )
-
-                    # 選択されたモデルのデータを取得
-                    result1 = next(
-                        (r for r in results if r["モデル"] == comp_model1), None
-                    )
-                    result2 = next(
-                        (r for r in results if r["モデル"] == comp_model2), None
                     )
 
-                    # 比較ビューを表示
-                    if result1 and result2 and result1 != result2:
-                        # モデル比較の統計表示
-                        comp_stats = pd.DataFrame(
-                            {
-                                "指標": [
-                                    "実行時間(秒)",
-                                    "入力トークン数",
-                                    "出力トークン数",
-                                    "総トークン数",
-                                    "API利用料金",
-                                ],
-                                result1["モデル"]: [
-                                    result1["実行時間(秒)"],
-                                    result1["入力トークン数"],
-                                    result1["出力トークン数"],
-                                    result1["総トークン数"],
-                                    result1["API利用料金"],
-                                ],
-                                result2["モデル"]: [
-                                    result2["実行時間(秒)"],
-                                    result2["入力トークン数"],
-                                    result2["出力トークン数"],
-                                    result2["総トークン数"],
-                                    result2["API利用料金"],
-                                ],
-                                "差異": [
-                                    f"{round(result1['実行時間(秒)'] - result2['実行時間(秒)'], 2)}秒",
-                                    result1["入力トークン数"]
-                                    - result2["入力トークン数"],
-                                    result1["出力トークン数"]
-                                    - result2["出力トークン数"],
-                                    result1["総トークン数"] - result2["総トークン数"],
-                                    f"${round(result1['API利用料金(数値)'] - result2['API利用料金(数値)'], 6)}",
-                                ],
-                            }
+                    # 出力結果を表示
+                    st.text_area(
+                        "モデル出力", result["出力"], height=350, key=f"result_{i}"
+                    )
+
+            # モデル間の比較ページを追加
+            st.subheader("⚖️ モデル比較")
+
+            if len(results) >= 2:
+                # 比較するモデルを選択
+                col_comp1, col_comp2 = st.columns(2)
+                with col_comp1:
+                    comp_model1 = st.selectbox(
+                        "モデル1", options=[r["モデル"] for r in results], index=0
+                    )
+                with col_comp2:
+                    comp_model2 = st.selectbox(
+                        "モデル2",
+                        options=[r["モデル"] for r in results],
+                        index=min(1, len(results) - 1),
+                    )
+
+                # 選択されたモデルのデータを取得
+                result1 = next((r for r in results if r["モデル"] == comp_model1), None)
+                result2 = next((r for r in results if r["モデル"] == comp_model2), None)
+
+                # 比較ビューを表示
+                if result1 and result2 and result1 != result2:
+                    # モデル比較の統計表示
+                    comp_stats = pd.DataFrame(
+                        {
+                            "指標": [
+                                "実行時間(秒)",
+                                "入力トークン数",
+                                "出力トークン数",
+                                "総トークン数",
+                                "API利用料金",
+                            ],
+                            result1["モデル"]: [
+                                result1["実行時間(秒)"],
+                                result1["入力トークン数"],
+                                result1["出力トークン数"],
+                                result1["総トークン数"],
+                                result1["API利用料金"],
+                            ],
+                            result2["モデル"]: [
+                                result2["実行時間(秒)"],
+                                result2["入力トークン数"],
+                                result2["出力トークン数"],
+                                result2["総トークン数"],
+                                result2["API利用料金"],
+                            ],
+                            "差異": [
+                                f"{round(result1['実行時間(秒)'] - result2['実行時間(秒)'], 2)}秒",
+                                result1["入力トークン数"] - result2["入力トークン数"],
+                                result1["出力トークン数"] - result2["出力トークン数"],
+                                result1["総トークン数"] - result2["総トークン数"],
+                                f"${round(result1['API利用料金(数値)'] - result2['API利用料金(数値)'], 6)}",
+                            ],
+                        }
+                    )
+
+                    st.dataframe(comp_stats, use_container_width=True)
+
+                    # 出力比較
+                    col_view1, col_view2 = st.columns(2)
+                    with col_view1:
+                        provider_color1 = (
+                            "#00A67E"
+                            if result1["プロバイダー"] == "OpenAI"
+                            else "#4285F4"
                         )
+                        st.markdown(
+                            f"<span style='color:{provider_color1}; font-weight:bold;'>{result1['モデル']}</span>",
+                            unsafe_allow_html=True,
+                        )
+                        st.text_area("", result1["出力"], height=250, key="comp_1")
+                    with col_view2:
+                        provider_color2 = (
+                            "#00A67E"
+                            if result2["プロバイダー"] == "OpenAI"
+                            else "#4285F4"
+                        )
+                        st.markdown(
+                            f"<span style='color:{provider_color2}; font-weight:bold;'>{result2['モデル']}</span>",
+                            unsafe_allow_html=True,
+                        )
+                        st.text_area("", result2["出力"], height=250, key="comp_2")
 
-                        st.dataframe(comp_stats, use_container_width=True)
-
-                        # 出力比較
-                        col_view1, col_view2 = st.columns(2)
-                        with col_view1:
-                            provider_color1 = (
-                                "#00A67E"
-                                if result1["プロバイダー"] == "OpenAI"
-                                else "#4285F4"
-                            )
-                            st.markdown(
-                                f"<span style='color:{provider_color1}; font-weight:bold;'>{result1['モデル']}</span>",
-                                unsafe_allow_html=True,
-                            )
-                            st.text_area("", result1["出力"], height=250, key="comp_1")
-                        with col_view2:
-                            provider_color2 = (
-                                "#00A67E"
-                                if result2["プロバイダー"] == "OpenAI"
-                                else "#4285F4"
-                            )
-                            st.markdown(
-                                f"<span style='color:{provider_color2}; font-weight:bold;'>{result2['モデル']}</span>",
-                                unsafe_allow_html=True,
-                            )
-                            st.text_area("", result2["出力"], height=250, key="comp_2")
-
-if st.session_state.get("is_execute_button"):
+# ダウンロード
+if st.session_state.get("results"):
     results = st.session_state["results"]
     df = pd.DataFrame(results)
     # 結果のダウンロードボタン
@@ -542,6 +564,8 @@ if st.session_state.get("is_execute_button"):
     )
     st.session_state["execute_button"] = True
 
-if st.session_state.get("is_execute_button"):
+# 戻る
+if st.session_state.get("results"):
     if st.button("ホームに戻る", type="primary"):
-        reset_session_state()
+        reset_execution()
+        st.rerun()
