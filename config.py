@@ -11,8 +11,6 @@ OPENAI_PRICING = {
     "gpt-4.1": {"input": 2.0/1000, "output": 8.0/1000},
     "gpt-4.1-mini": {"input": 0.4/1000, "output": 1.6/1000},
     "gpt-4.1-nano": {"input": 0.1/1000, "output": 0.4/1000},
-    "o3": {"input": 10/1000, "output": 40/1000},
-    "o4-mini": {"input": 1.1/1000, "output": 4.4/1000},
 }
 
 # Geminiの料金設定（1000トークンあたりのUSD）
@@ -33,6 +31,7 @@ MOCK_RESPONSE_DELAY = {
 }
 
 # モデルごとの速度カテゴリ
+# いらんこれ
 MODEL_SPEED_CATEGORY = {
     "gpt-3.5-turbo": "fast",
     "gpt-4": "slow",
