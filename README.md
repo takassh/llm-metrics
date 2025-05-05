@@ -24,6 +24,21 @@ Streamlit ベースのインターフェースを通じて、LLM の出力を定
 
 ## 🚀 使い方
 
+### 環境変数の設定
+
+API キーを設定するには、以下の2つの方法があります：
+
+1. **ローカル環境での開発時**: `.env` ファイルに API キーを設定
+   ```
+   # .env
+   OPENAI_API_KEY=your_openai_api_key_here
+   GOOGLE_API_KEY=your_google_api_key_here
+   ```
+
+2. **デプロイ環境**: アプリ内の入力フォームに直接 API キーを入力
+
+### アプリの起動
+
 Streamlit アプリを起動することで、ブラウザ上で操作できます：
 
 ```bash

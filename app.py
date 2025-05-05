@@ -1,9 +1,15 @@
 import datetime
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from dotenv import load_dotenv
+
+# APIキーのロード
+load_dotenv()
 
 from config import (
     DEFAULT_MAX_TOKENS,
@@ -16,14 +22,65 @@ from utils.llm_handler import MockLLMHandler, call_llm
 from utils.pricing import calculate_price
 
 
-def reset_execution():
-    st.session_state["results"] = []
-
-
 st.set_page_config(page_title="LLMモデル比較アプリ", layout="wide")
 
 st.title("LLMモデル比較アプリ")
 st.write("このアプリは、複数のLLMモデルの出力結果と実行速度、コストを比較します。")
+
+
+def reset_execution():
+    st.session_state["results"] = []
+
+
+# 並列処理を行うための関数を定義
+def execute_model(model_info):
+    """各モデルを実行する関数"""
+    model = model_info["model"]
+    provider = model_info["provider"]
+    user_prompt = model_info["user_prompt"]
+    temperature = model_info["temperature"]
+    max_tokens = model_info["max_tokens"]
+    api_key = model_info["api_key"]
+    mock_mode = model_info["mock_mode"]
+    mock_handler = model_info["mock_handler"]
+
+    try:
+        if mock_mode:
+            # モックモードでの実行
+            output, exec_time, input_tokens, output_tokens = mock_handler.call_llm(
+                model, provider, user_prompt, temperature, max_tokens
+            )
+        else:
+            # 実際のAPIでの実行
+            output, exec_time, input_tokens, output_tokens = call_llm(
+                model,
+                provider,
+                user_prompt,
+                temperature,
+                max_tokens,
+                api_key,
+            )
+
+        # 料金計算
+        pricing = calculate_price(provider, model, input_tokens, output_tokens)
+
+        return {
+            "モデル": model,
+            "プロバイダー": provider,
+            "実行時間(秒)": round(exec_time, 2),
+            "入力トークン数": input_tokens,
+            "出力トークン数": output_tokens,
+            "総トークン数": input_tokens + output_tokens,
+            "API利用料金": pricing["formatted_total"],
+            "API利用料金(数値)": pricing["total"],
+            "入力コスト": pricing["input_cost"],
+            "出力コスト": pricing["output_cost"],
+            "出力": output,
+            "error": None,
+        }
+    except Exception as e:
+        return {"モデル": model, "プロバイダー": provider, "error": str(e)}
+
 
 # セッション状態の初期化
 if "mock_mode" not in st.session_state:
@@ -49,8 +106,18 @@ with st.sidebar:
     if not mock_mode:
         # 本番モード時のAPIキー設定
         st.header("API Keys")
-        openai_api_key = st.text_input("OpenAI API Key", type="password")
-        google_api_key = st.text_input("Google API Key", type="password")
+
+        # 環境変数からAPIキーを取得（ローカル環境用）
+        env_openai_key = os.environ.get("OPENAI_API_KEY", "")
+        env_google_key = os.environ.get("GOOGLE_API_KEY", "")
+
+        # 環境変数があれば表示し、なければ空欄で入力を促す
+        openai_api_key = st.text_input(
+            "OpenAI API Key", value=env_openai_key, type="password"
+        )
+        google_api_key = st.text_input(
+            "Google API Key", value=env_google_key, type="password"
+        )
 
         # APIキーの状態確認
         st.session_state["has_openai_key"] = bool(openai_api_key)
@@ -114,108 +181,68 @@ if execute_button:
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        # 実行するモデルの総数を計算
-        total_models = len(openai_models) + len(gemini_models)
-        current_model = 0
+        # 実行するモデルの準備
+        model_tasks = []
 
-        results = []
-
-        # OpenAIモデルの実行
+        # OpenAIモデルの準備
         if openai_models and st.session_state["has_openai_key"]:
             for model in openai_models:
-                current_model += 1
-                progress = int(current_model / total_models * 100)
-                progress_bar.progress(progress)
-                status_text.text(f"実行中: {model} ({progress}%)")
-
-                if st.session_state["mock_mode"]:
-                    # モックモードでの実行
-                    output, exec_time, input_tokens, output_tokens = (
-                        mock_handler.call_llm(
-                            model, "OpenAI", user_prompt, temperature, max_tokens
-                        )
-                    )
-                else:
-                    # 実際のAPIでの実行
-                    try:
-                        output, exec_time, input_tokens, output_tokens = call_llm(
-                            model,
-                            "OpenAI",
-                            user_prompt,
-                            temperature,
-                            max_tokens,
-                            openai_api_key,
-                        )
-                    except Exception as e:
-                        st.error(f"OpenAI APIエラー: {str(e)}")
-                        continue
-
-                # 料金計算
-                pricing = calculate_price("OpenAI", model, input_tokens, output_tokens)
-
-                results.append(
+                model_tasks.append(
                     {
-                        "モデル": model,
-                        "プロバイダー": "OpenAI",
-                        "実行時間(秒)": round(exec_time, 2),
-                        "入力トークン数": input_tokens,
-                        "出力トークン数": output_tokens,
-                        "総トークン数": input_tokens + output_tokens,
-                        "API利用料金": pricing["formatted_total"],
-                        "API利用料金(数値)": pricing["total"],
-                        "入力コスト": pricing["input_cost"],
-                        "出力コスト": pricing["output_cost"],
-                        "出力": output,
+                        "model": model,
+                        "provider": "OpenAI",
+                        "user_prompt": user_prompt,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "api_key": openai_api_key,
+                        "mock_mode": st.session_state["mock_mode"],
+                        "mock_handler": mock_handler,
                     }
                 )
 
-        # Geminiモデルの実行
+        # Geminiモデルの準備
         if gemini_models and st.session_state["has_google_key"]:
             for model in gemini_models:
-                current_model += 1
-                progress = int(current_model / total_models * 100)
-                progress_bar.progress(progress)
-                status_text.text(f"実行中: {model} ({progress}%)")
+                model_tasks.append(
+                    {
+                        "model": model,
+                        "provider": "Google",
+                        "user_prompt": user_prompt,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "api_key": google_api_key,
+                        "mock_mode": st.session_state["mock_mode"],
+                        "mock_handler": mock_handler,
+                    }
+                )
 
-                if st.session_state["mock_mode"]:
-                    # モックモードでの実行
-                    output, exec_time, input_tokens, output_tokens = (
-                        mock_handler.call_llm(
-                            model, "Google", user_prompt, temperature, max_tokens
-                        )
+        # 並列実行
+        results = []
+        total_tasks = len(model_tasks)
+        completed_tasks = 0
+
+        status_text.text(f"モデルを並列実行中... (0/{total_tasks})")
+
+        # ThreadPoolExecutorを使用して並列実行
+        with ThreadPoolExecutor(max_workers=min(total_tasks, 8)) as executor:
+            future_to_model = {
+                executor.submit(execute_model, task): task for task in model_tasks
+            }
+
+            for future in as_completed(future_to_model):
+                result = future.result()
+                if result.get("error"):
+                    st.error(
+                        f"{result['プロバイダー']} {result['モデル']} エラー: {result['error']}"
                     )
                 else:
-                    # 実際のAPIでの実行
-                    try:
-                        output, exec_time, input_tokens, output_tokens = call_llm(
-                            model,
-                            "Google",
-                            user_prompt,
-                            temperature,
-                            max_tokens,
-                            google_api_key,
-                        )
-                    except Exception as e:
-                        st.error(f"Google Gemini APIエラー: {str(e)}")
-                        continue
+                    results.append(result)
 
-                # 料金計算
-                pricing = calculate_price("Google", model, input_tokens, output_tokens)
-
-                results.append(
-                    {
-                        "モデル": model,
-                        "プロバイダー": "Google",
-                        "実行時間(秒)": round(exec_time, 2),
-                        "入力トークン数": input_tokens,
-                        "出力トークン数": output_tokens,
-                        "総トークン数": input_tokens + output_tokens,
-                        "API利用料金": pricing["formatted_total"],
-                        "API利用料金(数値)": pricing["total"],
-                        "入力コスト": pricing["input_cost"],
-                        "出力コスト": pricing["output_cost"],
-                        "出力": output,
-                    }
+                completed_tasks += 1
+                progress = int(completed_tasks / total_tasks * 100)
+                progress_bar.progress(progress)
+                status_text.text(
+                    f"モデルを並列実行中... ({completed_tasks}/{total_tasks})"
                 )
 
         # 進捗表示をクリア
@@ -359,37 +386,6 @@ if st.session_state.get("results"):
                     "モード", "モック" if st.session_state["mock_mode"] else "本番"
                 )
 
-            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=250)
-
-            st.plotly_chart(fig, use_container_width=True)
-
-            # メタデータ
-            st.subheader("実行情報")
-
-            # メタデータを用意
-            metadata = {
-                "実行日時": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "使用プロンプト文字数": len(user_prompt),
-                "Temperature設定": temperature,
-                "最大トークン数": max_tokens,
-                "モード": (
-                    "モックモード" if st.session_state["mock_mode"] else "本番モード"
-                ),
-            }
-
-            # メタデータを視覚的に表示
-            col1_meta, col2_meta = st.columns(2)
-
-            with col1_meta:
-                st.metric("プロンプト文字数", len(user_prompt))
-                st.metric("最大トークン数", max_tokens)
-
-            with col2_meta:
-                st.metric("Temperature設定", f"{temperature:.1f}")
-                st.metric(
-                    "モード", "モック" if st.session_state["mock_mode"] else "本番"
-                )
-
             # トークン数のドーナツチャート
             token_data = stats_df[["モデル", "総トークン数"]].copy()
 
@@ -425,10 +421,10 @@ if st.session_state.get("results"):
                     st.markdown(
                         f"""
                             <div style="background-color:{provider_color}; color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
-                                <span style="font-size:1.2em; font-weight:bold;">{result['モデル']}</span> |
-                                {result['プロバイダー']} |
-                                実行時間: {result['実行時間(秒)']}秒 |
-                                コスト: {result['API利用料金']}
+                                <span style="font-size:1.2em; font-weight:bold;">{result["モデル"]}</span> |
+                                {result["プロバイダー"]} |
+                                実行時間: {result["実行時間(秒)"]}秒 |
+                                コスト: {result["API利用料金"]}
                             </div>
                             """,
                         unsafe_allow_html=True,
@@ -438,9 +434,9 @@ if st.session_state.get("results"):
                     st.markdown(
                         f"""
                             **トークン使用量**:
-                            入力: {result['入力トークン数']} |
-                            出力: {result['出力トークン数']} |
-                            合計: {result['総トークン数']}
+                            入力: {result["入力トークン数"]} |
+                            出力: {result["出力トークン数"]} |
+                            合計: {result["総トークン数"]}
                             """
                     )
 
@@ -542,7 +538,7 @@ if st.session_state.get("results"):
     st.download_button(
         label="結果をCSVとしてダウンロード",
         data=csv_data,
-        file_name=f'llm_comparison_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+        file_name=f"llm_comparison_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
         mime="text/csv",
     )
 
@@ -559,7 +555,7 @@ if st.session_state.get("results"):
     st.download_button(
         label="詳細結果をJSONとしてダウンロード",
         data=json_data,
-        file_name=f'llm_comparison_detail_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
+        file_name=f"llm_comparison_detail_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
         mime="application/json",
     )
     st.session_state["execute_button"] = True
